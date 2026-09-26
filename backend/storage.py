@@ -424,17 +424,31 @@ class DerivedStore:
 
     def load_community(self) -> dict:
         data = config.read_json(config.COMMUNITY_FILE, {})
-        data.setdefault("communities", {})
         data.setdefault("num_communities", 0)
         data.setdefault("modularity", 0.0)
         data.setdefault("computed_at", 0)
         data.setdefault("community_sizes", [])
         data.setdefault("resolution", config.LOUVAIN_RESOLUTION)
         data.setdefault("iterations", 0)
+        # JSON object keys are always strings, but every in-memory consumer
+        # indexes the partition with int node ids.  Normalise on load so the
+        # canonical in-memory representation is {int: int}.
+        raw_communities = data.get("communities", {})
+        communities = {}
+        for node, comm in raw_communities.items():
+            try:
+                communities[int(node)] = int(comm)
+            except (TypeError, ValueError):
+                continue
+        data["communities"] = communities
         return data
 
     def save_community(self, community: dict) -> None:
-        config.atomic_write_json(config.COMMUNITY_FILE, community)
+        payload = dict(community)
+        # JSON only allows string keys; load_community() coerces them back.
+        raw = payload.get("communities", {})
+        payload["communities"] = {str(int(k)): int(v) for k, v in raw.items()}
+        config.atomic_write_json(config.COMMUNITY_FILE, payload)
 
     def load_pagerank(self) -> dict:
         return config.read_json(config.PAGERANK_FILE, {})

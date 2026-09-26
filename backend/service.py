@@ -371,33 +371,50 @@ class SocialGraphService:
         result["community_map"] = {}
         for node, comm in result["communities"].items():
             result["community_map"][str(node)] = int(comm)
+        # Persist the fresh partition: the graph API reads community.json
+        # directly (COMMUNITY_READ_DIRECT), so without this the visualisation
+        # keeps using the previous (or missing) partition after recompute.
+        self.derived.save_community(result)
         self._community_cache = result
-        self._community_dirty = True
+        self._community_dirty = False
         return result
 
+    @staticmethod
+    def _normalise_communities(communities: dict) -> Dict[int, int]:
+        """Coerce a node -> community map to the canonical {int: int} form."""
+        normalised: Dict[int, int] = {}
+        for node, comm in (communities or {}).items():
+            try:
+                normalised[int(node)] = int(comm)
+            except (TypeError, ValueError):
+                continue
+        return normalised
+
     def get_community(self) -> dict:
-        if self._community_dirty:
-            self._community_dirty = False
-        if self._community_cache is not None:
-            return self._community_cache
-        cached = self.derived.load_community()
-        if cached.get("communities") or cached.get("num_communities", 0) > 0:
-            return cached
-        return {
-            "communities": {},
-            "num_communities": 0,
-            "modularity": 0.0,
-            "computed_at": 0,
-        }
+        with self._lock:
+            if self._community_cache is not None and not self._community_dirty:
+                return self._community_cache
+            cached = self.derived.load_community()
+            if cached.get("communities") or cached.get("num_communities", 0) > 0:
+                self._community_cache = cached
+                self._community_dirty = False
+                return cached
+            return {
+                "communities": {},
+                "num_communities": 0,
+                "modularity": 0.0,
+                "computed_at": 0,
+            }
 
     def _community_of(self, uid: int) -> int:
-        comm = self.get_community()
-        communities = comm.get("communities", {})
+        communities = self.get_community().get("communities", {})
         if not communities:
             return -1
+        uid = int(uid)
         if uid in communities:
-            return communities[uid]
-        return -1
+            return int(communities[uid])
+        # Tolerate legacy string-keyed partitions.
+        return int(communities.get(str(uid), -1))
 
     def compute_pagerank(self, top: int = 20, force: bool = False) -> dict:
         with self._lock:

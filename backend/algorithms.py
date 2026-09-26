@@ -432,14 +432,11 @@ def louvain(
     counter = Counter(node_comm)
     ordered = [c for c, _ in counter.most_common()]
     remap = {c: new_id for new_id, c in enumerate(ordered)}
-    communities = {}
-    for i in range(n):
-        nid = id_of(i)
-        if config.COMMUNITY_KEY_TYPE == "str":
-            key = str(nid)
-        else:
-            key = nid
-        communities[key] = remap[node_comm[i]]
+    # Keys are node ids in their native (int) type; every consumer (graph API,
+    # profiles, export, user details) looks the partition up with int node ids.
+    # JSON persistence stringifies keys on write and load_community() coerces
+    # them back on read, so do not use string keys here.
+    communities = {id_of(i): int(remap[node_comm[i]]) for i in range(n)}
 
     return {
         "communities": communities,
