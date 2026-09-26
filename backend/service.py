@@ -372,6 +372,9 @@ class SocialGraphService:
         for node, comm in result["communities"].items():
             result["community_map"][str(node)] = int(comm)
         self._community_cache = result
+        # Persist so direct readers (``/api/community`` with
+        # COMMUNITY_READ_DIRECT) and future process restarts see the result.
+        self.derived.save_community(result)
         self._community_dirty = True
         return result
 

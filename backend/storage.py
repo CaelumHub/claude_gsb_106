@@ -431,10 +431,22 @@ class DerivedStore:
         data.setdefault("community_sizes", [])
         data.setdefault("resolution", config.LOUVAIN_RESOLUTION)
         data.setdefault("iterations", 0)
+        # JSON keys are always strings, but node ids are ints everywhere in the
+        # domain layer; normalise on load so community lookups by int id work.
+        data["communities"] = {
+            int(node): int(comm) for node, comm in data["communities"].items()
+        }
         return data
 
     def save_community(self, community: dict) -> None:
-        config.atomic_write_json(config.COMMUNITY_FILE, community)
+        payload = dict(community)
+        # int node ids must become strings to survive JSON serialisation.
+        comm_map = payload.get("communities")
+        if isinstance(comm_map, dict):
+            payload["communities"] = {
+                str(node): int(comm) for node, comm in comm_map.items()
+            }
+        config.atomic_write_json(config.COMMUNITY_FILE, payload)
 
     def load_pagerank(self) -> dict:
         return config.read_json(config.PAGERANK_FILE, {})

@@ -429,17 +429,13 @@ def louvain(
     modularity = _compute_modularity()
 
     # Renumber communities compactly (largest first for stable colours).
+    # Keys stay as int node ids -- the domain type used everywhere else
+    # (graph nodes, storage loaders).  JSON persistence performs the
+    # int -> str conversion on write and str -> int on read.
     counter = Counter(node_comm)
     ordered = [c for c, _ in counter.most_common()]
     remap = {c: new_id for new_id, c in enumerate(ordered)}
-    communities = {}
-    for i in range(n):
-        nid = id_of(i)
-        if config.COMMUNITY_KEY_TYPE == "str":
-            key = str(nid)
-        else:
-            key = nid
-        communities[key] = remap[node_comm[i]]
+    communities = {id_of(i): remap[node_comm[i]] for i in range(n)}
 
     return {
         "communities": communities,
